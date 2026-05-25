@@ -1539,6 +1539,34 @@ class PyWin32Adapter(
         """
         return self.swApp is not None
 
+    def _ensure_connected_sync(self) -> None:
+        """Connect to SolidWorks from synchronous adapter operations on demand."""
+        if self.swApp is not None:
+            active_doc = self._attempt(lambda: self.swApp.ActiveDoc, default=None)
+            if self.currentModel is None and active_doc is not None:
+                self.currentModel = active_doc
+                self.currentSketchManager = self._attempt(
+                    lambda: active_doc.SketchManager, default=None
+                )
+            return
+
+        self._session_coordinator.initialize_com_apartment()
+        app = self._session_coordinator._run_coro_sync(
+            self._session_coordinator.acquire_solidworks_application()
+        )
+        self._attempt(lambda: sw_type_info.flag_methods(app, "ISldWorks"), default=0)
+        self._session_coordinator._run_coro_sync(
+            self._session_coordinator.wait_for_server_ready(app)
+        )
+        app.Visible = True
+        self._set_automation_preferences(app, interactive=False)
+        active_doc = self._attempt(lambda: app.ActiveDoc, default=None)
+        if active_doc is not None:
+            self.currentModel = active_doc
+            self.currentSketchManager = self._attempt(
+                lambda: active_doc.SketchManager, default=None
+            )
+
     async def health_check(self) -> AdapterHealth:
         """Get adapter health status.
 
@@ -1620,6 +1648,7 @@ class PyWin32Adapter(
         start_time = time.time()
 
         try:
+            self._ensure_connected_sync()
             result = operation_func(*operation_args, **operation_kwargs)
             execution_time = time.time() - start_time
             self.update_metrics(execution_time, True)

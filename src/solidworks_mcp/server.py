@@ -422,14 +422,7 @@ class SolidWorksMCPServer:
         await self.setup()
 
         if self.adapter:
-            try:
-                await self.adapter.connect()
-                self.state.is_connected = True
-                logger.info("Connected to SolidWorks")
-            except Exception as e:
-                logger.warning(f"Could not connect to SolidWorks: {e}")
-                if not self.config.mock_solidworks:
-                    logger.warning("Continuing with mock adapter for testing")
+            logger.info("SolidWorks connection will be opened lazily on first tool call")
 
         # Record startup time
         from datetime import datetime

@@ -25,6 +25,8 @@ class SolidWorksSelectionMixin:
     async def list_features(
         self, include_suppressed: bool = False
     ) -> AdapterResult[list[dict[str, Any]]]:
+        if hasattr(self, "_ensure_connected_sync"):
+            self._ensure_connected_sync()
         if not self.currentModel:
             return AdapterResult(
                 status=AdapterResultStatus.ERROR,

@@ -551,6 +551,8 @@ class SolidWorksIOMixin:
             AdapterResult[dict[str, Any]]: Model information payload.
         """
         adapter = self._adapter(self)
+        if hasattr(adapter, "_ensure_connected_sync"):
+            adapter._ensure_connected_sync()
         if not adapter.currentModel:
             return AdapterResult(
                 status=AdapterResultStatus.ERROR, error="No active model"
@@ -612,6 +614,8 @@ class SolidWorksIOMixin:
             AdapterResult[list[str]]: Configuration names, or empty list when unavailable.
         """
         adapter = self._adapter(self)
+        if hasattr(adapter, "_ensure_connected_sync"):
+            adapter._ensure_connected_sync()
         if not adapter.currentModel:
             return AdapterResult(
                 status=AdapterResultStatus.ERROR,
@@ -653,6 +657,8 @@ class SolidWorksIOMixin:
             AdapterResult[MassProperties]: Computed mass, volume, area, COM, and inertia.
         """
         adapter = self._adapter(self)
+        if hasattr(adapter, "_ensure_connected_sync"):
+            adapter._ensure_connected_sync()
         if not adapter.currentModel:
             return AdapterResult(
                 status=AdapterResultStatus.ERROR, error="No active model"
