@@ -1492,6 +1492,13 @@ class PyWin32Adapter(
             SolidWorksMCPError: If connection or readiness checks fail.
         """
         await self._session_coordinator.connect()
+        if self.swApp is not None:
+            active_doc = self._attempt(lambda: self.swApp.ActiveDoc, default=None)
+            if active_doc is not None:
+                self.currentModel = active_doc
+                self.currentSketchManager = self._attempt(
+                    lambda: active_doc.SketchManager, default=None
+                )
 
     async def disconnect(self) -> None:
         """Disconnect from SolidWorks application.

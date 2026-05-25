@@ -558,27 +558,42 @@ class SolidWorksIOMixin:
 
         def _get_info() -> dict[str, Any]:
             """Get model information."""
-            active_config = adapter.currentModel.GetActiveConfiguration()
+            def _member(name: str, default: Any = None) -> Any:
+                value = adapter._attempt(
+                    lambda: getattr(adapter.currentModel, name), default=None
+                )
+                if callable(value):
+                    return adapter._attempt(value, default=default)
+                return default if value is None else value
+
+            def _member_int(name: str, default: int = 0) -> int:
+                value = _member(name, default)
+                try:
+                    return int(value or 0)
+                except (TypeError, ValueError):
+                    return default
+
+            active_config = _member("GetActiveConfiguration")
             # 'Name' on Configuration is a property, not a method.
             config_name = getattr(active_config, "Name", "Default") if active_config else "Default"
             # Try GetSaveFlag (method) first, fallback to property
-            is_dirty_raw = adapter._attempt(
-                lambda: adapter.currentModel.GetSaveFlag(), default=None
-            )
+            is_dirty_raw = _member("GetSaveFlag", None)
             is_dirty = bool(is_dirty_raw) if is_dirty_raw is not None else None
             feature_count = adapter._attempt(
-                lambda: int(adapter.currentModel.FeatureManager.GetFeatureCount(True) or 0),
+                lambda: int(adapter.currentModel.FeatureManager.GetFeatureCount(True) or 0)
+                if callable(getattr(adapter.currentModel.FeatureManager, "GetFeatureCount", None))
+                else int(getattr(adapter.currentModel.FeatureManager, "GetFeatureCount", 0) or 0),
                 default=0,
             )
-            rebuild_status_raw = adapter._attempt(
-                lambda: adapter.currentModel.GetRebuildStatus(), default=None
-            )
+            rebuild_status_raw = _member("GetRebuildStatus", None)
             # GetRebuildStatus returns 0=ok, 1=needs rebuild, or None=failed
             rebuild_status = rebuild_status_raw if rebuild_status_raw is not None else None
             return {
-                "title": adapter.currentModel.GetTitle(),
-                "path": adapter.currentModel.GetPathName(),
-                "type": adapter._get_document_type(),
+                "title": _member("GetTitle", ""),
+                "path": _member("GetPathName", ""),
+                "type": {1: "Part", 2: "Assembly", 3: "Drawing"}.get(
+                    _member_int("GetType", 0), "Unknown"
+                ),
                 "configuration": config_name,
                 "is_dirty": is_dirty,
                 "feature_count": feature_count,

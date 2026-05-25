@@ -401,14 +401,14 @@ class SolidWorksMCPServer:
 
         run_stdio = getattr(self.server, "run_stdio", None)
         if callable(run_stdio):
-            result = run_stdio()
+            result = run_stdio(show_banner=False, log_level="ERROR")
             if inspect.isawaitable(result):
                 await result
             return
 
         run_stdio_async = getattr(self.server, "run_stdio_async", None)
         if callable(run_stdio_async):
-            await run_stdio_async()
+            await run_stdio_async(show_banner=False, log_level="ERROR")
             return
 
         raise SolidWorksMCPError("FastMCP server does not expose a stdio runner")
