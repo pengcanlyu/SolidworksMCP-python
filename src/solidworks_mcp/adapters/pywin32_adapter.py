@@ -147,12 +147,14 @@ class _ComSessionCoordinator:
         pythoncom.CoUninitialize()
         self._adapter._com_initialized = False
 
-    async def acquire_solidworks_application(self) -> Any:
+    async def acquire_solidworks_application(
+        self, *, start_if_missing: bool = True
+    ) -> Any:
         """Acquire a live SolidWorks COM application object with retries.
 
-        Attempts up to 8 connect-cycles.  Each cycle first tries
+        Attempts up to 8 connect-cycles. Each cycle first tries
         ``win32com.client.GetActiveObject("SldWorks.Application")`` to bind to
-        a running instance, then falls back to
+        a running instance. When ``start_if_missing`` is true, it falls back to
         ``win32com.client.Dispatch("SldWorks.Application")`` to start one.
         Between cycles the coroutine sleeps 1 second so that a slow
         SolidWorks launch has time to register its COM class.
@@ -182,6 +184,9 @@ class _ComSessionCoordinator:
                     return app
             except pywintypes.com_error as active_error:
                 last_error = active_error
+
+            if not start_if_missing:
+                break
 
             try:
                 app = _dynamic_dispatch("SldWorks.Application")
@@ -268,7 +273,7 @@ class _ComSessionCoordinator:
             app.SetUserPreferenceToggle(520, False)
             app.SetUserPreferenceToggle(642, False)
 
-    async def connect(self) -> None:
+    async def connect(self, *, start_if_missing: bool = True) -> None:
         """Orchestrate the full SolidWorks connection sequence.
 
         Performs in order:
@@ -287,7 +292,9 @@ class _ComSessionCoordinator:
         """
         try:
             self.initialize_com_apartment()
-            app = await self.acquire_solidworks_application()
+            app = await self.acquire_solidworks_application(
+                start_if_missing=start_if_missing
+            )
             self._adapter._attempt(
                 lambda: sw_type_info.flag_methods(app, "ISldWorks"), default=0
             )
@@ -1505,6 +1512,13 @@ class PyWin32Adapter(
             SolidWorksMCPError: If connection or readiness checks fail.
         """
         await self._session_coordinator.connect()
+        if self.swApp is not None:
+            active_doc = self._attempt(lambda: self.swApp.ActiveDoc, default=None)
+            if active_doc is not None:
+                self.currentModel = active_doc
+                self.currentSketchManager = self._attempt(
+                    lambda: active_doc.SketchManager, default=None
+                )
 
     async def disconnect(self) -> None:
         """Disconnect from SolidWorks application.
@@ -1543,6 +1557,38 @@ class PyWin32Adapter(
                                 await adapter.connect()
                             ```
         """
+        return self.swApp is not None
+
+    async def _ensure_connected(self) -> bool:
+        """Attach on demand without launching SolidWorks.
+
+        Returns:
+            bool: ``True`` when a usable application or model is available.
+        """
+        if self.swApp is not None:
+            active_doc = self._attempt(lambda: self.swApp.ActiveDoc, default=None)
+            if active_doc is not None:
+                self.currentModel = active_doc
+                self.currentSketchManager = self._attempt(
+                    lambda: active_doc.SketchManager, default=None
+                )
+            return True
+
+        if self.currentModel is not None:
+            return True
+
+        try:
+            await self._session_coordinator.connect(start_if_missing=False)
+        except SolidWorksMCPError as exc:
+            logger.debug("No running SolidWorks instance available: {}", exc)
+            return False
+
+        active_doc = self._attempt(lambda: self.swApp.ActiveDoc, default=None)
+        if active_doc is not None:
+            self.currentModel = active_doc
+            self.currentSketchManager = self._attempt(
+                lambda: active_doc.SketchManager, default=None
+            )
         return self.swApp is not None
 
     async def health_check(self) -> AdapterHealth:

@@ -375,8 +375,10 @@ class TestSolidWorksMCPServer:
                 mock_start_http.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_server_connection_failure_handling(self, mock_config):
-        """Test server handling of connection failures."""
+    async def test_server_defers_connection_even_when_adapter_would_fail(
+        self, mock_config
+    ):
+        """A broken COM connection must not prevent the MCP server from starting."""
         server = SolidWorksMCPServer(mock_config)
 
         # Mock adapter that fails to connect
@@ -397,6 +399,7 @@ class TestSolidWorksMCPServer:
                             # Server should be running but not connected
                             assert server.state.adapter is not None
                             assert server.state.is_connected is False
+                            mock_adapter.connect.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_setup_agent_testing_mode_disables_agent(self):
@@ -450,7 +453,7 @@ class TestSolidWorksMCPServer:
         server.server = SimpleNamespace(run_stdio=sync_runner)
 
         await server._run_local_stdio()
-        sync_runner.assert_called_once()
+        sync_runner.assert_called_once_with(show_banner=False, log_level="ERROR")
 
     @pytest.mark.asyncio
     async def test_run_local_stdio_with_async_runner(self):
@@ -462,7 +465,7 @@ class TestSolidWorksMCPServer:
         server.server = SimpleNamespace(run_stdio_async=async_runner)
 
         await server._run_local_stdio()
-        async_runner.assert_called_once()
+        async_runner.assert_awaited_once_with(show_banner=False, log_level="ERROR")
 
     @pytest.mark.asyncio
     async def test_run_local_stdio_mock_mode_without_stdin(self, monkeypatch):
@@ -862,7 +865,7 @@ async def test_run_local_stdio_sets_server_and_awaits_sync_runner_result(mock_co
     async def _runner():
         awaited["done"] = True
 
-    server.mcp = SimpleNamespace(run_stdio=lambda: _runner())
+    server.mcp = SimpleNamespace(run_stdio=lambda **_kwargs: _runner())
 
     class _BadStdin:
         closed = False
@@ -914,8 +917,8 @@ class TestServerToolEventLogging:
 
 
 @pytest.mark.asyncio
-async def test_start_marks_connected_on_success(mock_config):
-    """Covers successful adapter connect branch in start()."""
+async def test_start_defers_adapter_connection(mock_config):
+    """Starting the MCP transport must not launch or attach to SolidWorks."""
     server = SolidWorksMCPServer(mock_config)
     server.config.deployment_mode = DeploymentMode.LOCAL
     server.setup = AsyncMock()
@@ -927,12 +930,13 @@ async def test_start_marks_connected_on_success(mock_config):
 
     await server.start()
 
-    assert server.state.is_connected is True
+    adapter.connect.assert_not_awaited()
+    assert server.state.is_connected is False
 
 
 @pytest.mark.asyncio
-async def test_start_logs_mock_fallback_warning_when_connect_fails(mock_config):
-    """Covers connect-failure fallback warning branch in non-mock mode."""
+async def test_start_does_not_probe_adapter_connection(mock_config):
+    """Adapter connection failures are irrelevant until a tool needs SolidWorks."""
     server = SolidWorksMCPServer(mock_config)
     server.config.deployment_mode = DeploymentMode.LOCAL
     server.config.mock_solidworks = False
@@ -943,13 +947,10 @@ async def test_start_logs_mock_fallback_warning_when_connect_fails(mock_config):
     adapter.connect = AsyncMock(side_effect=RuntimeError("connect failed"))
     server.adapter = adapter
 
-    with patch("solidworks_mcp.server.logger.warning") as mock_warning:
-        await server.start()
+    await server.start()
 
-    assert any(
-        "Continuing with mock adapter for testing" in str(call.args[0])
-        for call in mock_warning.call_args_list
-    )
+    adapter.connect.assert_not_awaited()
+    assert server.state.is_connected is False
 
 
 def test_cli_applies_overrides_and_runs_with_loaded_config():

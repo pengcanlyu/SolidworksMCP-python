@@ -94,24 +94,21 @@ async def test_validate_solidworks_installation_paths(monkeypatch):
     monkeypatch.setattr(validation_mod.logger, "info", info)
     monkeypatch.setattr(validation_mod.shutil, "which", lambda _p: None)
 
-    # COM available path.
-    fake_win32com = SimpleNamespace(
-        client=SimpleNamespace(Dispatch=Mock(return_value=object()))
-    )
-    monkeypatch.setitem(sys.modules, "win32com", fake_win32com)
-    monkeypatch.setitem(sys.modules, "win32com.client", fake_win32com.client)
+    # COM registration is checked without instantiating SolidWorks.
+    fake_pythoncom = SimpleNamespace(CLSIDFromProgID=Mock(return_value=object()))
+    monkeypatch.setitem(sys.modules, "pythoncom", fake_pythoncom)
 
     cfg = SimpleNamespace(solidworks_path="C:/Program Files/SolidWorks/sldworks.exe")
     await validation_mod._validate_solidworks_installation(cfg)
 
     assert warning.called
     assert info.called
-    assert "COM interface is available" in info.call_args[0][0]
+    assert "COM registration is available" in info.call_args[0][0]
 
-    # COM dispatch failure path.
-    fake_win32com.client.Dispatch = Mock(side_effect=RuntimeError("dispatch error"))
+    # COM registration lookup failure path.
+    fake_pythoncom.CLSIDFromProgID = Mock(side_effect=RuntimeError("lookup error"))
     await validation_mod._validate_solidworks_installation(cfg)
-    assert "COM interface issue" in warning.call_args[0][0]
+    assert "COM registration issue" in warning.call_args[0][0]
 
 
 @pytest.mark.asyncio
@@ -124,8 +121,8 @@ async def test_validate_solidworks_installation_import_error(monkeypatch):
 
     def _import(name, globals=None, locals=None, fromlist=(), level=0):
         """Test helper for import."""
-        if name == "win32com.client":
-            raise ImportError("missing win32com")
+        if name == "pythoncom":
+            raise ImportError("missing pythoncom")
         return real_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", _import)
@@ -133,4 +130,4 @@ async def test_validate_solidworks_installation_import_error(monkeypatch):
     cfg = SimpleNamespace(solidworks_path=None)
     await validation_mod._validate_solidworks_installation(cfg)
 
-    assert "COM interface issue" in warning.call_args[0][0]
+    assert "COM registration issue" in warning.call_args[0][0]

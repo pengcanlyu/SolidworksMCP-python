@@ -137,7 +137,9 @@ class TestServerCoverage:
         server.server.run_stdio_async = AsyncMock()
 
         await server._run_local_stdio()
-        server.server.run_stdio_async.assert_called_once()
+        server.server.run_stdio_async.assert_awaited_once_with(
+            show_banner=False, log_level="ERROR"
+        )
 
     @pytest.mark.asyncio
     async def test_start_http_server_awaits_coroutine(self):
@@ -163,8 +165,8 @@ class TestServerCoverage:
         assert ran
 
     @pytest.mark.asyncio
-    async def test_start_logs_connection_error_in_mock_mode(self):
-        """Lines 254-259 — adapter.connect raises; mock mode continues."""
+    async def test_start_defers_connection_in_mock_mode(self):
+        """Server startup never probes the adapter connection."""
         from solidworks_mcp.config import DeploymentMode, SolidWorksMCPConfig
         from solidworks_mcp.server import SolidWorksMCPServer
 
@@ -185,6 +187,7 @@ class TestServerCoverage:
             mock_sys.stdin = MagicMock(closed=True)
             await server.start()
 
+        server.adapter.connect.assert_not_awaited()
         assert not server.state.is_connected
 
 

@@ -66,12 +66,13 @@ async def _validate_solidworks_installation(config: SolidWorksMCPConfig) -> None
                 f"SolidWorks executable not found at: {config.solidworks_path}"
             )
 
-    # Try to check COM registration (basic check)
+    # Check COM registration without instantiating the COM server. Dispatch starts
+    # SolidWorks in embedding mode during MCP startup, which is too invasive for
+    # validation and can surface the application's .NET loader dialog.
     try:
-        import win32com.client
+        import pythoncom
 
-        # Try to create SolidWorks object (without starting it)
-        win32com.client.Dispatch("SldWorks.Application", None)
-        logger.info("SolidWorks COM interface is available")
+        pythoncom.CLSIDFromProgID("SldWorks.Application")
+        logger.info("SolidWorks COM registration is available")
     except Exception as e:
-        logger.warning(f"SolidWorks COM interface issue: {e}")
+        logger.warning(f"SolidWorks COM registration issue: {e}")

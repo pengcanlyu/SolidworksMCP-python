@@ -558,18 +558,14 @@ class SolidWorksIOMixin:
                         if callable(save_fn):
                             save_fn()
                     if not os.path.exists(resolved_path):
-                        raise Exception(
-                            f"File not written after save: {resolved_path}"
-                        )
+                        raise Exception(f"File not written after save: {resolved_path}")
                     return
 
                 # A *different* document may be holding the target path open.
                 # Close that one by name only - never the document being saved.
                 if adapter.swApp:
                     adapter._attempt(
-                        lambda: adapter.swApp.CloseDoc(
-                            os.path.basename(resolved_path)
-                        )
+                        lambda: adapter.swApp.CloseDoc(os.path.basename(resolved_path))
                     )
 
                 # Deliberately no os.remove here: SaveAs3 overwrites, and
@@ -642,6 +638,8 @@ class SolidWorksIOMixin:
             AdapterResult[dict[str, Any]]: Model information payload.
         """
         adapter = self._adapter(self)
+        if hasattr(adapter, "_ensure_connected"):
+            await adapter._ensure_connected()
         active_model = (
             getattr(adapter.swApp, "ActiveDoc", None) if adapter.swApp else None
         )
@@ -708,6 +706,8 @@ class SolidWorksIOMixin:
             AdapterResult[list[str]]: Configuration names, or empty list when unavailable.
         """
         adapter = self._adapter(self)
+        if hasattr(adapter, "_ensure_connected"):
+            await adapter._ensure_connected()
         if not adapter.currentModel:
             return AdapterResult(
                 status=AdapterResultStatus.ERROR,
@@ -749,6 +749,8 @@ class SolidWorksIOMixin:
             AdapterResult[MassProperties]: Computed mass, volume, area, COM, and inertia.
         """
         adapter = self._adapter(self)
+        if hasattr(adapter, "_ensure_connected"):
+            await adapter._ensure_connected()
         if not adapter.currentModel:
             return AdapterResult(
                 status=AdapterResultStatus.ERROR, error="No active model"

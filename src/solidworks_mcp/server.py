@@ -386,14 +386,14 @@ class SolidWorksMCPServer:
 
         run_stdio = getattr(self.server, "run_stdio", None)
         if callable(run_stdio):
-            result = run_stdio()
+            result = run_stdio(show_banner=False, log_level="ERROR")
             if inspect.isawaitable(result):
                 await result
             return
 
         run_stdio_async = getattr(self.server, "run_stdio_async", None)
         if callable(run_stdio_async):
-            await run_stdio_async()
+            await run_stdio_async(show_banner=False, log_level="ERROR")
             return
 
         raise SolidWorksMCPError("FastMCP server does not expose a stdio runner")
@@ -407,14 +407,9 @@ class SolidWorksMCPServer:
         await self.setup()
 
         if self.adapter:
-            try:
-                await self.adapter.connect()
-                self.state.is_connected = True
-                logger.info("Connected to SolidWorks")
-            except Exception as e:
-                logger.warning(f"Could not connect to SolidWorks: {e}")
-                if not self.config.mock_solidworks:
-                    logger.warning("Continuing with mock adapter for testing")
+            logger.info(
+                "SolidWorks connection will be opened lazily on first tool call"
+            )
 
         # Record startup time
         from datetime import datetime

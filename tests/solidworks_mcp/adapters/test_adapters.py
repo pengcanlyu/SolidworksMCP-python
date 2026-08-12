@@ -1300,6 +1300,7 @@ class TestPyWin32AdapterBranches:
     async def test_feature_and_configuration_edge_paths(self, monkeypatch):
         """Cover list_features/list_configurations edge cases and guarded feature ops."""
         adapter = self._build_adapter(monkeypatch)
+        adapter.swApp = SimpleNamespace(ActiveDoc=None)
 
         # Guard branches on no active model.
         assert (await adapter.list_configurations()).is_error
@@ -2313,6 +2314,7 @@ class TestPyWin32AdapterBranches:
     ) -> None:
         """get_model_info/list_features should return guard errors when model is absent."""
         adapter = self._build_adapter(monkeypatch)
+        adapter.swApp = SimpleNamespace(ActiveDoc=None)
 
         info_result = await adapter.get_model_info()
         list_result = await adapter.list_features()
@@ -2875,6 +2877,7 @@ class TestPyWin32AdapterBranches:
         """Cover sketch guard returns and mass-properties fallback error branches."""
         adapter = self._build_adapter(monkeypatch)
 
+        adapter.swApp = SimpleNamespace(ActiveDoc=None)
         adapter.currentModel = None
         assert (await adapter.create_sketch("Top")).is_error
         assert (await adapter.get_mass_properties()).is_error
