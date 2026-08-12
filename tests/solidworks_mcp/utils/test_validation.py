@@ -5,7 +5,7 @@ from __future__ import annotations
 import builtins
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -95,8 +95,15 @@ async def test_validate_solidworks_installation_paths(monkeypatch):
     monkeypatch.setattr(validation_mod.shutil, "which", lambda _p: None)
 
     # COM registration is checked without instantiating SolidWorks.
-    fake_pythoncom = SimpleNamespace(CLSIDFromProgID=Mock(return_value=object()))
-    monkeypatch.setitem(sys.modules, "pythoncom", fake_pythoncom)
+    fake_key = MagicMock()
+    fake_key.__enter__.return_value = fake_key
+    fake_key.__exit__.return_value = False
+    fake_winreg = SimpleNamespace(
+        HKEY_CLASSES_ROOT=object(),
+        OpenKey=Mock(return_value=fake_key),
+        QueryValueEx=Mock(return_value=("{6AF263BB-EB9F-4176-89E9-4F892EB0CA3D}", 1)),
+    )
+    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
 
     cfg = SimpleNamespace(solidworks_path="C:/Program Files/SolidWorks/sldworks.exe")
     await validation_mod._validate_solidworks_installation(cfg)
@@ -106,7 +113,7 @@ async def test_validate_solidworks_installation_paths(monkeypatch):
     assert "COM registration is available" in info.call_args[0][0]
 
     # COM registration lookup failure path.
-    fake_pythoncom.CLSIDFromProgID = Mock(side_effect=RuntimeError("lookup error"))
+    fake_winreg.QueryValueEx = Mock(side_effect=RuntimeError("lookup error"))
     await validation_mod._validate_solidworks_installation(cfg)
     assert "COM registration issue" in warning.call_args[0][0]
 
@@ -121,8 +128,8 @@ async def test_validate_solidworks_installation_import_error(monkeypatch):
 
     def _import(name, globals=None, locals=None, fromlist=(), level=0):
         """Test helper for import."""
-        if name == "pythoncom":
-            raise ImportError("missing pythoncom")
+        if name == "winreg":
+            raise ImportError("missing winreg")
         return real_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", _import)

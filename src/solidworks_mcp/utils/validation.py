@@ -70,9 +70,14 @@ async def _validate_solidworks_installation(config: SolidWorksMCPConfig) -> None
     # SolidWorks in embedding mode during MCP startup, which is too invasive for
     # validation and can surface the application's .NET loader dialog.
     try:
-        import pythoncom
+        import winreg
 
-        pythoncom.CLSIDFromProgID("SldWorks.Application")
+        with winreg.OpenKey(
+            winreg.HKEY_CLASSES_ROOT, r"SldWorks.Application\CLSID"
+        ) as key:
+            clsid, _ = winreg.QueryValueEx(key, None)
+        if not clsid:
+            raise OSError("SolidWorks CLSID registration is empty")
         logger.info("SolidWorks COM registration is available")
     except Exception as e:
         logger.warning(f"SolidWorks COM registration issue: {e}")
